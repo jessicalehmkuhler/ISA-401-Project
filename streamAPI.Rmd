@@ -1,0 +1,100 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-05-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+if(require(httr) == FALSE) install.packages("httr")
+
+url <- "https://streaming-availability.p.rapidapi.com/search/filters"
+
+services <- c("netflix", "apple", "prime", "hbo", "starz", "paramount", "peacock", "disney", "hulu")
+services_string <- paste(services, collapse = ",")
+
+queryString <- list(
+  services = services_string,
+  country = "us",
+  output_language = "en",
+  order_by = "original_title",
+  genres_relation = "and",
+  show_type = "all"
+)
+
+response <- httr::VERB("GET", url, query = queryString, 
+                       httr::add_headers(`X-RapidAPI-Key` = 'ed4ff89be2mshefb7bc6965a3884p1d41bbjsnbb3a39123134', 
+                                         `X-RapidAPI-Host` = 'streaming-availability.p.rapidapi.com'))
+
+content <- httr::content(response, "text")
+
+print(content)
+```
+```{r}
+if(require(jsonlite) == FALSE) install.packages("jsonlite")
+
+
+parsed_content <- jsonlite::fromJSON(content, flatten = T)
+results_df = parsed_content$result 
+results_df = results_df[-9,]
+
+stream_df = data.frame()
+for (i in 1:nrow(results_df)) {
+  lst = results_df$streamingInfo.us[i]
+  df = lst[[1]]
+  print(paste('We are currently in row', i))
+  if('price.amount' %in% colnames(df)){
+  df$title = results_df$title[i]
+  df = df |> dplyr::select(title, service, price.amount)
+  stream_df = rbind(stream_df, df)  
+  }else{
+    df$title = results_df$title[i]
+    df$price.amount = NA
+    df = df |> dplyr::select(title, service, price.amount)
+    stream_df = rbind(stream_df, df) 
+  }
+  
+}
+
+```
+
+```{r}
+stream_df <- data.frame()
+
+for (i in 1:nrow(results_df)) {
+  lst <- results_df$streamingInfo.us[i]
+  df <- lst[[1]]
+  print(paste('We are currently in row', i))
+
+  # Corrected condition
+  if('streamingType' %in% colnames(df) & 'price.amount' %in% colnames(df)){
+    df$title <- results_df$title[i]
+    df <- df |> 
+      dplyr::select(title, service, `price.amount`, streamingType)
+    stream_df <- rbind(stream_df, df)  
+  } else {
+    df$title <- results_df$title[i]
+    df$`price.amount` <- NA
+    # Adjusted to ensure consistency in column presence
+    if(!"service" %in% colnames(df)) df$service <- NA
+    if(!"streamingType" %in% colnames(df)) df$streamingType <- NA
+    df <- df |> 
+      dplyr::select(title, service, `price.amount`, streamingType)
+    stream_df <- rbind(stream_df, df) 
+  }
+}
+if(require(utils)==FALSE) install.packages("utils")
+
+utils::write.csv(stream_df, "streamAPI.csv", row.names = FALSE)
+
+```
+
+
+
+
+
